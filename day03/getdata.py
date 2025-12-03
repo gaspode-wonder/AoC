@@ -1,3 +1,5 @@
+from aocd import get_data
+
 day_data = get_data(day=3, year=2025)
 print(day_data)
 
