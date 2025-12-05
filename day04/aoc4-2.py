@@ -9,11 +9,7 @@ DIRS = [(-1,-1), (0,-1), (1,-1),
 def read_grid(path):
     with open(path, 'r', encoding='utf-8') as f:
         lines = [line.rstrip('\n') for line in f if line.strip() != '']
-    width = len(lines[0])
-    for i, line in enumerate(lines):
-        if len(line) != width:
-            raise ValueError(f"Non-rectangular grid at line {i+1}: expected {width}, got {len(line)}")
-    return lines
+    return [list(line) for line in lines]
 
 def count_neighbors(grid, x, y):
     h, w = len(grid), len(grid[0])
@@ -24,27 +20,27 @@ def count_neighbors(grid, x, y):
             cnt += 1
     return cnt
 
-def compute_accessible(grid):
+def remove_accessible(grid):
     h, w = len(grid), len(grid[0])
-    accessible = []
+    to_remove = []
     for y in range(h):
         for x in range(w):
             if grid[y][x] == '@':
-                n = count_neighbors(grid, x, y)
-                if n < 4:
-                    accessible.append((x, y, n))
-    return accessible
+                if count_neighbors(grid, x, y) < 4:
+                    to_remove.append((x, y))
+    for x, y in to_remove:
+        grid[y][x] = '.'
+    return len(to_remove)
 
 def main():
     grid = read_grid(INPUT_FILE)
-    accessible = compute_accessible(grid)
-
-    total_rolls = sum(row.count('@') for row in grid)
-    accessible_count = len(accessible)
-
-    print(f"Total rolls: {total_rolls}")
-    print(f"Accessible rolls (<4 adjacent '@'): {accessible_count}")
-    print(f"\n>>> FINAL RESULT: {accessible_count} rolls can be accessed <<<")
+    total_removed = 0
+    while True:
+        removed = remove_accessible(grid)
+        if removed == 0:
+            break
+        total_removed += removed
+    print(f"Total rolls removed: {total_removed}")
 
 if __name__ == "__main__":
     main()
