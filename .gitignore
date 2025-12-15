@@ -1,5 +1,2 @@
-day05/aocdata.txt
-day04/aocdata.txt
-day03/aocdata.txt
-day02/aocdata.csv
-day01/aocdata.txt
+*.txt
+*.csv
