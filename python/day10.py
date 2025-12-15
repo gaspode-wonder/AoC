@@ -1,92 +1,85 @@
+#!/usr/bin/env python3
+import re, sys
 from collections import deque
-import re
+import pulp   # install with: pip install pulp
 
-def parse_line(line):
-    # Extract diagram, buttons
-    diag = re.search(r'\[([.#]+)\]', line).group(1)
-    target = 0
+# ---------- Part One ----------
+def parse_line_part1(line):
+    m = re.search(r'\[([.#]+)\]', line)
+    diag = m.group(1)
     n = len(diag)
-    for i, ch in enumerate(diag):
-        if ch == '#':
-            target |= 1 << i
-    buttons = []
+    target = sum(1<<i for i,ch in enumerate(diag) if ch=="#")
+    buttons=[]
     for group in re.findall(r'\(([^)]*)\)', line):
-        group = group.strip()
-        if not group:  # empty button toggles nothing
-            buttons.append(0)
-            continue
-        nums = [int(x) for x in re.split(r'[,\s]+', group) if x != '']
-        mask = 0
-        for k in nums:
-            if 0 <= k < n:
-                mask |= 1 << k
+        mask=0
+        for tok in group.replace(","," ").split():
+            mask |= 1<<int(tok)
         buttons.append(mask)
-    return n, target, buttons
+    return n,target,buttons
 
-def bidir_bfs(n, target, buttons):
-    start = 0
-    if start == target:
-        return 0
-    # Frontier maps state -> distance from respective side
-    front_a = {start: 0}
-    front_b = {target: 0}
-    qa = deque([start])
-    qb = deque([target])
-    visited_a = set([start])
-    visited_b = set([target])
-
-    steps = 0
-    # Expand the smaller frontier each time
+def bidir_bfs(n,target,buttons):
+    start=0
+    if start==target: return 0
+    qa,qb=deque([start]),deque([target])
+    da,db={start:0},{target:0}
+    va,vb={start},{target}
     while qa and qb:
-        if len(qa) <= len(qb):
-            size = len(qa)
-            for _ in range(size):
-                state = qa.popleft()
-                da = front_a[state]
-                for mask in buttons:
-                    nxt = state ^ mask
-                    if nxt in front_b:
-                        return da + 1 + front_b[nxt]
-                    if nxt not in visited_a:
-                        visited_a.add(nxt)
-                        front_a[nxt] = da + 1
-                        qa.append(nxt)
+        if len(qa)<=len(qb):
+            for _ in range(len(qa)):
+                s=qa.popleft()
+                for m in buttons:
+                    t=s^m
+                    if t in db: return da[s]+1+db[t]
+                    if t not in va:
+                        va.add(t); da[t]=da[s]+1; qa.append(t)
         else:
-            size = len(qb)
-            for _ in range(size):
-                state = qb.popleft()
-                db = front_b[state]
-                for mask in buttons:
-                    nxt = state ^ mask
-                    if nxt in front_a:
-                        return db + 1 + front_a[nxt]
-                    if nxt not in visited_b:
-                        visited_b.add(nxt)
-                        front_b[nxt] = db + 1
-                        qb.append(nxt)
-    # Unreachable (shouldn’t happen in valid inputs)
+            for _ in range(len(qb)):
+                s=qb.popleft()
+                for m in buttons:
+                    t=s^m
+                    if t in da: return db[s]+1+da[t]
+                    if t not in vb:
+                        vb.add(t); db[t]=db[s]+1; qb.append(t)
     return None
 
-def solve_day10(lines):
-    total = 0
+def solve_part1(lines):
+    return sum(bidir_bfs(*parse_line_part1(line)) for line in lines if line.strip())
+
+# ---------- Part Two ----------
+def parse_line_part2(line):
+    btns=[]
+    for group in re.findall(r'\(([^)]*)\)', line):
+        idxs=[int(x) for x in group.replace(","," ").split() if x]
+        btns.append(idxs)
+    target=[int(x) for x in re.split(r'[,\s]+', re.search(r'\{([^}]*)\}', line).group(1)) if x]
+    m=len(target)
+    btns=[[k for k in b if 0<=k<m] for b in btns]
+    return btns,target
+
+def solve_machine_ilp(buttons,target):
+    prob=pulp.LpProblem("Day10Part2", pulp.LpMinimize)
+    x=[pulp.LpVariable(f"x{i}", lowBound=0, cat="Integer") for i in range(len(buttons))]
+    prob += pulp.lpSum(x)
+    m=len(target)
+    for r in range(m):
+        prob += pulp.lpSum(x[j] for j,b in enumerate(buttons) if r in b) == target[r]
+    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+    return int(round(pulp.value(pulp.lpSum(x))))
+
+def solve_part2(lines):
+    total=0
     for line in lines:
-        if not line.strip():
-            continue
-        n, target, buttons = parse_line(line)
-        presses = bidir_bfs(n, target, buttons)
-        if presses is None:
-            raise ValueError("Target unreachable for line: " + line)
-        total += presses
+        if not line.strip(): continue
+        b,t=parse_line_part2(line)
+        total+=solve_machine_ilp(b,t)
     return total
 
-if __name__ == "__main__":
-    #sample = [
-    #    "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}",
-    #    "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}",
-    #    "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}",
-    #]
-    # print("Sample total:", solve_day10(sample))  # Expected: 7
-    # For your input file:
-    with open("input/day10.txt") as f:
-        lines = [line.rstrip("\n") for line in f]
-    print("Day 10 Part One Answer:", solve_day10(lines))
+# ---------- Main ----------
+if __name__=="__main__":
+    if len(sys.argv)<4:
+        print("Usage: day10.py --part 1|2 input.txt"); sys.exit(1)
+    if sys.argv[1]!="--part": print("First arg must be --part"); sys.exit(1)
+    part=int(sys.argv[2]); filename=sys.argv[3]
+    with open(filename) as f: lines=[l.strip() for l in f]
+    ans=solve_part1(lines) if part==1 else solve_part2(lines)
+    print(f"Day 10 Part {part} Answer:",ans)
